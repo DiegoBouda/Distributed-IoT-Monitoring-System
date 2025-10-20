@@ -4,6 +4,8 @@ from PIL import Image
 from threading import Thread
 from randomDHT import randomDHT
 import paho.mqtt.client as paho
+from io import BytesIO
+import base64
 
 class Sensor():
 
@@ -38,8 +40,8 @@ class Sensor():
 
   def init_dht(self):
     #Ellie - Todo
-    self.dht = None
-
+    self.dht = randomDHT()
+    
   def init_camera(self):
     from picamera2 import Picamera2
     self.camera = Picamera2()
@@ -50,18 +52,35 @@ class Sensor():
 
 
   def take_photo(self):
-    '''Process Image Data'''
-    image = self.camera.capture_image()
-    image.show()
-    self.client.publish(self.image_topic, image, 1)
+      image = self.camera.capture_image()
+
+      buffer = BytesIO()
+      image.save(buffer, format="JPEG")
+      buffer.seek(0)
+      image_bytes = buffer.read()
+
+      image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+
+      self.client.publish(self.image_topic, image_b64, qos=1)
 
   def read_dht(self):
     '''Process Temperature and Humidity Data'''
     temp = self.dht.read_temperature()
     humidity = self.dht.read_humidity()
-    print(f'temp: {temp} humid: {humidity}')
+    light = self.dht.read_light()
+    print(f'temp: {temp} humid: {humidity} light: {light}')
     self.client.publish(self.temp_topic, temp, 1)
     self.client.publish(self.humidity_topic, humidity, 1)
+    self.client.publish(self.light_topic, light, 1)
+
+  def on_connect(self, client, userdata, flags, rc):
+    if rc == 0:
+        print("Connected to MQTT Broker successfully")
+    else:
+      print(f"Failed to connect, return code {rc}")
+
+  def on_publish(self, client, userdata, mid):
+    print(f"Message published successfully (MID: {mid})")
 
 
   def photo_loop(self):
@@ -80,20 +99,23 @@ class Sensor():
     self.t1.start()
     self.t2.start()
 
-    self.t1.join()
-    self.t2.join()
-
-
 if __name__ == "__main__":
 
-  # Setting up mocks for sensors
   mock_camera = Mock()
   mock_camera.capture_image.return_value = Image.open("xena.jpg")
   
   dht = randomDHT()
-  dht.read_temperature.return_value = 27.1
-  dht.read_humidity.return_value=54.1
 
-  sensor = Sensor(camera=mock_camera, dht=dht)
+  sensor1 = Sensor(sensor_id="sensor1", camera=mock_camera, dht=dht)
+  sensor2 = Sensor(sensor_id="sensor2", camera=mock_camera, dht=dht)
+  sensor3 = Sensor(sensor_id="sensor3", camera=mock_camera, dht=dht)
 
-  sensor.start()
+  sensor1.start() 
+  sensor2.start()
+  sensor3.start()
+
+  try:
+    while True:
+      sleep(1)
+  except KeyboardInterrupt:
+    print("Stopping all sensors")
