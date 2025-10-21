@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 async def chat_client(username="Anonymous", channel="general"):
     try:
-        async with websockets.connect("ws://localhost:8000") as ws:
+        async with websockets.connect("ws://localhost:8765") as ws:
             logging.info("Connected to WebSocket server")
 
             init_msg = {
